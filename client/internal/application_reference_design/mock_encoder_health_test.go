@@ -58,6 +58,7 @@ func buildTestRegistration() *cddsdkgo.DeviceRegistration {
 		Protocols: []cddsdkgo.TransportProtocolName{cddsdkgo.TRANSPORTPROTOCOLNAME_SRT_CALLER},
 	}
 	return &cddsdkgo.DeviceRegistration{
+		Version:          *cddsdkgo.NewProtocolVersionWithDefaults(),
 		ChannelTemplates: []cddsdkgo.ChannelTemplate{tmpl},
 		ChannelAssignments: []cddsdkgo.ChannelAssignment{
 			{ChannelId: "CH01", Name: "Channel 1", TemplateId: "tmpl1"},

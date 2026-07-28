@@ -95,7 +95,11 @@ func (p *Pairing) GetPairingCode() string {
 }
 
 // GetNewPairingCode requests a new pairing code from the host service.
-func (p *Pairing) GetNewPairingCode() error {
+// deviceVersion is the device-declared protocol version from the registration;
+// it is sent verbatim so the host applies compatibility checks against the
+// version the device claims, not against whatever the SDK's own model happens
+// to be linked against.
+func (p *Pairing) GetNewPairingCode(deviceVersion string) error {
 	if err := p.Certs.GenerateKeysAndCSR(); err != nil {
 		return fmt.Errorf("failed to generate keys: %w", err)
 	}
@@ -103,7 +107,7 @@ func (p *Pairing) GetNewPairingCode() error {
 		DeviceType:                tr12models.DeviceType(p.DeviceType),
 		HostId:                    p.HostID,
 		CertificateSigningRequest: p.Certs.CSR,
-		Version:                   *tr12models.NewProtocolVersionWithDefaults(),
+		Version:                   tr12models.ProtocolVersion{Version: deviceVersion},
 	}
 	body, _ := json.Marshal(reqBody)
 	log.Printf("[PAIR] POST %s/pair  body=%s", p.PairingURL, string(body))

@@ -54,6 +54,15 @@ func (s *CddSdk) Register(registration *cddsdkgo.DeviceRegistration) cddsdkgo.Re
 			Message: "registration is required",
 		}
 	}
+	// Same version compatibility rule as initializeHost — re-check on every /register
+	// call, since the incoming registration is fresh from the caller.
+	if err := s.checkRegistrationVersion(registration); err != nil {
+		return cddsdkgo.ReportStatusResponseContent{
+			Success: false, State: s.state,
+			Message: err.Error(),
+			Error:   utils.ExceptionToErrorDetails(err),
+		}
+	}
 	if len(registration.ChannelTemplates) == 0 {
 		return cddsdkgo.ReportStatusResponseContent{
 			Success: false, State: s.state,

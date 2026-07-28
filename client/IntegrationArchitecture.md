@@ -25,7 +25,8 @@ The diagram below shows how these pieces interact.
 ```
   ┌──────────────────────────────┐
   │                              │  Runs in browser.
-  │  4. Web Console              │  User enables/disables TR-12, points to TR-12 Service
+  │  4. Web Console              │  User enables/disables TR-12, points to TR-12 version
+  vice
   │  (Device UI)                 │  Sees connected status,
   │                              │  pairing code, etc.
   └──────────────┬───────────────┘
@@ -74,6 +75,52 @@ The diagram below shows how these pieces interact.
 | 2 → 1 | TR-12 Shim → Native API | Apply desired configuration (codec, resolution, channel state, transport, etc.) |
 | 1 → 2 | Native API → TR-12 Shim | Read back actual device state for status and configuration reporting |
 | 3 → Host | CDD SDK → Host Service | Pairing, authentication, MQTT pub/sub over TLS on port 443 |
+
+## TR-12 Protocol Version
+
+Every device registration carries a `version` field that declares which TR-12 protocol version the device's payloads (registration, status, actual configuration, thumbnails, etc.) conform to. This value is the device's *contract* with the SDK and the host — everything the device sends on the wire must fit within that declared version.
+
+### Semantics
+
+The version string follows `MAJOR.MINOR.PATCH`:
+
+- **MAJOR** — breaking wire change (removed field, renamed field, type change, new required field). Old code fails.
+- **MINOR** — additive, backwards compatible (new optional field, new enum value, new transport protocol). Old code ignores what it doesn't recognise.
+- **PATCH** — no wire change (documentation, shape renames).
+
+Two versions are compatible if, and only if, their `MAJOR` values match and the receiver's `MINOR` is greater than or equal to the payload's `MINOR`. A receiver on a newer minor is always a strict superset of a payload on an older minor.
+
+### Where the integrator sets it
+
+In the registration JSON your shim sends to the SDK via `/connect` (and `/register`):
+
+```json
+{
+  "version": { "version": "11.0.0" },
+  "channelTemplates": [ ... ],
+  "channelAssignments": [ ... ],
+  "settings": [ ... ]
+}
+```
+
+The value **must match the MAJOR.MINOR the device's shim was implemented against**. It is not a marketing version and it is not the device firmware version — it is the TR-12 protocol version the shim commits to speaking.
+
+### Where the version is validated
+
+The device-declared version is checked at **three** points and must pass all three:
+
+1. **SDK `/connect` and `/register` HTTP handlers** — reject the registration if the JSON does not include `version.version`, if the value does not match `MAJOR.MINOR.PATCH`, or if it is not compatible with the SDK's own compiled-in TR-12 model. The response is `success=false` with a message beginning `Incompatible registration version X (SDK: Y). Ensure the device is compatible with TR12 major/minor version`. **Pairing does not start** if this check fails.
+2. **`CreatePairingCode` request to the host** — the SDK carries the *device-declared* version verbatim into the pairing request so the host applies its own compatibility check against what the device claims, not against the SDK's own model version.
+3. **Host MQTT registration receipt** — the host runs the same compatibility check against its own model when the SDK publishes the registration on `cdd/{deviceId}/registration/report`. Defense in depth: if a custom or older SDK skips step 1, the host still refuses to store an incompatible registration.
+
+The console surfaces the accepted version in the device detail panel under `TR-12 Version`.
+
+### Practical guidance for integrators
+
+- **Keep your registration JSON in lockstep with the model version you build against.** When you upgrade the CDD SDK dependency, review whether your MAJOR or MINOR has changed and update `version.version` in your registration JSON to match.
+- **Never inject or auto-fill the version.** The device makes the claim explicitly. If you rely on the shim to synthesise it from the linked model, you can lose visibility into a version drift where the shim's model is ahead of what the device's user-facing configuration actually supports.
+- **A newer SDK with an older declared version is fine.** SDK 11.2 accepting a registration that declares 11.0 is a valid deployment (the SDK is a strict superset). But the *device* is bound by 11.0 — any 11.1 or 11.2 fields it accidentally populates will not be honoured by an 11.0 host.
+- **If a host rejects your device on connect**, check the SDK response message for both versions. It tells you whether the device declared something too new for the host, or the SDK is on a different major from the device's declaration.
 
 ## DeviceCallbacks Interface
 

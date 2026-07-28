@@ -141,8 +141,10 @@ func (s *CddSdk) handleDisconnectedState() (cddsdkgo.ConnectResponseContent, err
 		}
 		return s.startConnect()
 	}
-	// Need to pair
-	if err := s.pairer.GetNewPairingCode(); err != nil {
+	// Need to pair. Use the device-declared version from the registration —
+	// initializeHost validated it before we get here, so the string is guaranteed
+	// to match MAJOR.MINOR.PATCH.
+	if err := s.pairer.GetNewPairingCode(s.registration.Version.Version); err != nil {
 		return cddsdkgo.ConnectResponseContent{}, err
 	}
 	s.transition(models.StatePairing)

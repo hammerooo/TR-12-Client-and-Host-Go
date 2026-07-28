@@ -1,4 +1,5 @@
 {
+  "version": { "version": "11.0.0" },
   "settings": [
     {
       "name": "Clock Source",

@@ -28,6 +28,7 @@ import (
 	"github.com/vsf-tv/TR-12-Client-and-Host-Go/client/internal/pairing"
 	"github.com/vsf-tv/TR-12-Client-and-Host-Go/client/internal/thumbnails"
 	"github.com/vsf-tv/TR-12-Client-and-Host-Go/client/internal/utils"
+	"github.com/vsf-tv/TR-12-Client-and-Host-Go/client/internal/version"
 	cddsdkgo "github.com/vsf-tv/TR-12-Client-and-Host-Go/models/cdd_sdk/generated/cdd_sdkgo"
 	tr12models "github.com/vsf-tv/TR-12-Client-and-Host-Go/models/TR-12-Models/generated/tr12go"
 )
@@ -132,6 +133,13 @@ func (s *CddSdk) initThrottles(intervalSeconds int) {
 
 func (s *CddSdk) initializeHost(registration *cddsdkgo.DeviceRegistration, hostID string) error {
 	s.logger.Infof("initializeHost: loading host config for %s from basePath=%s", hostID, s.basePath)
+	// Verify the device-declared protocol version in the registration is compatible
+	// with this SDK's compiled-in TR-12 model. This is the single choke point for
+	// version validation — every state transition through Connect() flows through
+	// initializeHost, and Register() calls checkRegistrationVersion() directly.
+	if err := s.checkRegistrationVersion(registration); err != nil {
+		return err
+	}
 	s.registration = registration
 	hostConfig, err := utils.GetHostConfiguration(hostID, s.basePath)
 	if err != nil {
@@ -185,6 +193,37 @@ func (s *CddSdk) canPublishNow(throttle *utils.Throttle) error {
 	}
 	if !throttle.CanPublish() {
 		return fmt.Errorf("request throttled: too many requests")
+	}
+	return nil
+}
+
+// checkRegistrationVersion enforces the TR-12 protocol compatibility rule between
+// the device-declared version in a registration and this SDK's compiled-in model.
+//
+// The Smithy shape marks ProtocolVersion.version as @required and constrains it
+// with a @pattern of MAJOR.MINOR.PATCH numbers, so a payload that reaches this
+// point has already passed structural validation at ShouldBindJSON. The only
+// runtime check needed is semantic compatibility: same major, receiver.minor
+// greater-than-or-equal-to payload.minor.
+//
+// Returns nil on compatible, or a descriptive error otherwise. Callers embed the
+// error in their response (ConnectResponse/ReportStatusResponse Success=false).
+func (s *CddSdk) checkRegistrationVersion(reg *cddsdkgo.DeviceRegistration) error {
+	sdkVersion := cddsdkgo.NewProtocolVersionWithDefaults().GetVersion()
+	// ProtocolVersion.Version is a value type in the generated code (required +
+	// pattern-constrained), so it's safe to read directly. The Smithy shape
+	// guarantees UnmarshalJSON rejected any payload with a missing or malformed
+	// version before we ever reached this method.
+	if reg == nil {
+		return fmt.Errorf("registration is nil")
+	}
+	declared := reg.Version.Version
+	ok, err := version.IsCompatible(sdkVersion, declared)
+	if err != nil {
+		return fmt.Errorf("invalid registration version %q (SDK: %s): %w. Ensure the device is compatible with TR12 major/minor version", declared, sdkVersion, err)
+	}
+	if !ok {
+		return fmt.Errorf("Incompatible registration version %s (SDK: %s). Ensure the device is compatible with TR12 major/minor version", declared, sdkVersion)
 	}
 	return nil
 }
