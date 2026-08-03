@@ -265,8 +265,8 @@ Example for the local TR-12 Host Service:
   "serviceId": "tr12-host",
   "serviceName": "My TR-12 Host",
   "deviceTypes": ["SOURCE", "DESTINATION", "BOTH"],
-  "createPairingCodeUrl": "http://127.0.0.1:8080",
-  "authenticatePairingCodeUrl": "http://127.0.0.1:8080",
+  "createPairingCodeUrl": "http://127.0.0.1:8080/pair",
+  "authenticatePairingCodeUrl": "http://127.0.0.1:8080/authenticate",
   "thumbnailMaximumSizeKB": 100,
   "logFileMaximumSizeKB": 500
 }

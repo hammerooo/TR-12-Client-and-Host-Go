@@ -110,8 +110,8 @@ func (p *Pairing) GetNewPairingCode(deviceVersion string) error {
 		Version:                   tr12models.ProtocolVersion{Version: deviceVersion},
 	}
 	body, _ := json.Marshal(reqBody)
-	log.Printf("[PAIR] POST %s/pair  body=%s", p.PairingURL, string(body))
-	resp, err := p.httpClient.Post(p.PairingURL+"/pair", "application/json", bytes.NewReader(body))
+	log.Printf("[PAIR] POST %s  body=%s", p.PairingURL, string(body))
+	resp, err := p.httpClient.Post(p.PairingURL, "application/json", bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("pairing unable to connect to the service: %w", err)
 	}
@@ -137,7 +137,9 @@ func (p *Pairing) GetNewPairingCode(deviceVersion string) error {
 		}
 	}
 
-	if resp.StatusCode != http.StatusOK {
+	// Accept any 2xx as success — different host implementations return either
+	// 200 (local Go host) or 201 Created (API Gateway proxied). Both are valid.
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("pairing API error - StatusCode: %d - Response: %s", resp.StatusCode, string(respBody))
 	}
 
@@ -161,15 +163,17 @@ func (p *Pairing) AuthenticatePairingCode() (bool, error) {
 		AccessCode:  p.PairResponse.AccessCode,
 	}
 	body, _ := json.Marshal(reqBody)
-	log.Printf("[AUTH] POST %s/authenticate  body=%s", p.AuthURL, string(body))
-	resp, err := p.httpClient.Post(p.AuthURL+"/authenticate", "application/json", bytes.NewReader(body))
+	log.Printf("[AUTH] POST %s  body=%s", p.AuthURL, string(body))
+	resp, err := p.httpClient.Post(p.AuthURL, "application/json", bytes.NewReader(body))
 	if err != nil {
 		return false, fmt.Errorf("auth unable to connect to the service: %w", err)
 	}
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(resp.Body)
 	log.Printf("[AUTH] Response status=%d body=%s", resp.StatusCode, string(respBody))
-	if resp.StatusCode != http.StatusOK {
+	// Accept any 2xx as success — hosts may return 200 or 201 depending on
+	// implementation (local Go host vs API Gateway).
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return false, fmt.Errorf("auth API error - StatusCode: %d - Response: %s", resp.StatusCode, string(respBody))
 	}
 	var authResp models.AuthenticatePairingCodeResponseContent

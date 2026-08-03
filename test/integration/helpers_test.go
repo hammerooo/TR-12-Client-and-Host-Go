@@ -290,8 +290,8 @@ func newTestEnv(t *testing.T) *testEnv {
   "serviceId": "tr12-host",
   "serviceName": "Integration Test Host",
   "deviceTypes": ["SOURCE", "DESTINATION", "BOTH"],
-  "createPairingCodeUrl": "http://127.0.0.1:%d",
-  "authenticatePairingCodeUrl": "http://127.0.0.1:%d",
+  "createPairingCodeUrl": "http://127.0.0.1:%d/pair",
+  "authenticatePairingCodeUrl": "http://127.0.0.1:%d/authenticate",
   "thumbnailMaximumSizeKB": 100,
   "logFileMaximumSizeKB": 500
 }`, httpPort, httpPort)
