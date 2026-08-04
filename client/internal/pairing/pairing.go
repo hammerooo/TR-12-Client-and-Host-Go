@@ -28,7 +28,11 @@ import (
 	tr12models "github.com/vsf-tv/TR-12-Client-and-Host-Go/models/TR-12-Models/generated/tr12go"
 )
 
-const maxTimeoutSec = 5
+// maxTimeoutSec is the per-request timeout for pair and authenticate POSTs.
+// Sized to absorb API Gateway + Lambda cold starts (typically 3-8 seconds,
+// occasionally longer). Warm calls still return in ms; this value only affects
+// how long we wait when a backing Lambda has been reaped.
+const maxTimeoutSec = 15
 
 // Pairing manages the pairing process with the host service.
 type Pairing struct {

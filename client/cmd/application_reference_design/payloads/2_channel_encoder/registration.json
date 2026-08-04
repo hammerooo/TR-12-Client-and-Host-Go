@@ -18,6 +18,13 @@
       "id": "main",
       "channelType": "SOURCE",
       "protocols": ["SRT_CALLER", "SRT_LISTENER"],
+      "profiles": [
+        { "name": "h264_contribution_compact", "id": "h264c",  "description": "H264, 30fps, 10mbs, 720p, 6s gop" },
+        { "name": "h264_contribution_full",    "id": "h264f",  "description": "H264, 60fps, 20mbs, 1080p, 3s gop" },
+        { "name": "h265_contribution_compact", "id": "h265c",  "description": "H265, 30fps, 10mbs, 1080p, 3s gop" },
+        { "name": "h265_4k",                   "id": "h265k",  "description": "H265, 60fps, 40mps, 4k, 3s gop" },
+        { "name": "h265_4k_low_latency",       "id": "h265kl", "description": "H265, 60fps, 40mps, 4k, 500ms gop" }
+      ],
       "settings": [
         {
           "name": "resolution", "description": "Output video dimensions.", "id": "RS01",

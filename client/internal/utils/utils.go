@@ -126,28 +126,20 @@ func SSLContext(caCertFile, deviceCertFile, privateKeyFile, iotProtocolName stri
 	if err != nil {
 		return nil, fmt.Errorf("failed to load device cert/key: %w", err)
 	}
+	// Standard TLS with mutual auth:
+	//   - RootCAs anchors the server-cert chain (contains whatever the pairing
+	//     service supplied as caCertificate — Amazon Root CA 1 for AWS IoT).
+	//   - Certificates presents the device cert for client authentication.
+	//   - NextProtos advertises the ALPN protocol supplied by the host settings
+	//     (e.g. "x-amzn-mqtt-ca" for AWS IoT MQTT on 443).
+	// Go's default verification uses the dialed hostname for SNI + hostname
+	// checks and uses intermediate certs from the wire to build the chain to
+	// a root in RootCAs. No custom VerifyPeerCertificate needed.
 	return &tls.Config{
-		RootCAs:            caCertPool,
-		Certificates:       []tls.Certificate{cert},
-		NextProtos:         []string{iotProtocolName},
-		MinVersion:         tls.VersionTLS12,
-		// Skip hostname verification — the server cert is signed by our private CA
-		// (validated via VerifyPeerCertificate below). Hostname checking breaks on IP changes.
-		InsecureSkipVerify: true,
-		VerifyPeerCertificate: func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
-			if len(rawCerts) == 0 {
-				return fmt.Errorf("no server certificate provided")
-			}
-			cert, err := x509.ParseCertificate(rawCerts[0])
-			if err != nil {
-				return fmt.Errorf("failed to parse server cert: %w", err)
-			}
-			opts := x509.VerifyOptions{Roots: caCertPool}
-			if _, err := cert.Verify(opts); err != nil {
-				return fmt.Errorf("server cert not trusted by our CA: %w", err)
-			}
-			return nil
-		},
+		RootCAs:      caCertPool,
+		Certificates: []tls.Certificate{cert},
+		NextProtos:   []string{iotProtocolName},
+		MinVersion:   tls.VersionTLS12,
 	}, nil
 }
 
