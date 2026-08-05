@@ -14,13 +14,26 @@ echo "=== Building TR-12 Client and Host ==="
 
 # --- Regenerate Smithy models (optional) ---
 if [ "$REGEN" = true ]; then
+  # postprocess enriches openapi-generator's Go struct tags with min/max/pattern
+  # from the OpenAPI spec (openapi-generator emits only @pattern by default and
+  # over-escapes backslashes). See models/cdd_sdk/postprocess-validate-tags.py.
+  POSTPROC="$SCRIPT_DIR/models/cdd_sdk/postprocess-validate-tags.py"
+
   echo "=== Regenerating TR-12-Models (Go) ==="
   cd "$SCRIPT_DIR/models/TR-12-Models"
   ./generate-tr12-models.sh go
+  echo "=== Enriching TR-12-Models Go validate tags ==="
+  python3 "$POSTPROC" \
+    --spec "$SCRIPT_DIR/models/TR-12-Models/build/smithy/source/openapi/HostServiceApi.openapi.json" \
+    --dir  "$SCRIPT_DIR/models/TR-12-Models/generated/tr12go"
 
   echo "=== Regenerating cdd_sdk models (Go) ==="
   cd "$SCRIPT_DIR/models/cdd_sdk"
   ./generate-client-sdk-models.sh go
+  echo "=== Enriching cdd_sdk Go validate tags ==="
+  python3 "$POSTPROC" \
+    --spec "$SCRIPT_DIR/models/cdd_sdk/build/smithy/source/openapi/CddService.openapi.json" \
+    --dir  "$SCRIPT_DIR/models/cdd_sdk/generated/cdd_sdkgo"
 
   echo "=== Regenerating cdd_sdk models (TypeScript) ==="
   cd "$SCRIPT_DIR/models/cdd_sdk"

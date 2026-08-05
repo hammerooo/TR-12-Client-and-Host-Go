@@ -14,6 +14,7 @@ package mqtt
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"strings"
 
@@ -22,6 +23,7 @@ import (
 	"github.com/vsf-tv/TR-12-Client-and-Host-Go/host/internal/service"
 	"github.com/vsf-tv/TR-12-Client-and-Host-Go/host/internal/version"
 	tr12models "github.com/vsf-tv/TR-12-Client-and-Host-Go/models/TR-12-Models/generated/tr12go"
+	"gopkg.in/validator.v2"
 )
 
 // Handlers manages internal MQTT subscriptions.
@@ -57,11 +59,13 @@ func (h *Handlers) handleRegistration(topic string, payload []byte) {
 		log.Printf("[mqtt] invalid registration envelope from %s: %v", deviceID, err)
 		return
 	}
-	// Defense in depth: the SDK's /connect handler already rejected incompatible
-	// versions before pairing, but a custom or older SDK could bypass that. If
-	// the device-declared version is not compatible with the host's model, drop
-	// the registration so the device does not appear operational.
-	if !checkRegistrationVersion(deviceID, envelope.DeviceRegistration) {
+	// Defense in depth. The SDK's /connect handler already rejected bad payloads
+	// before pairing, but a custom or older SDK could bypass that. Validate the
+	// registration ourselves — structural (pattern+length via validator.v2 on
+	// the enriched struct tags) and semantic (version compat) — and drop the
+	// registration on any violation so the device does not appear operational.
+	if err := validateHostRegistration(deviceID, envelope.DeviceRegistration); err != nil {
+		log.Printf("[mqtt] WARN dropping registration from %s: %v", deviceID, err)
 		return
 	}
 	if err := h.store.UpdateDeviceRegistration(deviceID, envelope.DeviceRegistration); err != nil {
@@ -71,31 +75,35 @@ func (h *Handlers) handleRegistration(topic string, payload []byte) {
 	}
 }
 
-// checkRegistrationVersion parses the version field from a raw registration
-// payload and compares it against the host's own model version. Returns false
-// (and logs a warning) if the payload is missing a version or is incompatible.
-func checkRegistrationVersion(deviceID string, reg json.RawMessage) bool {
+// validateHostRegistration parses the wire registration into the typed model
+// and runs the same class of checks the SDK does before publish: struct-tag
+// validation (pattern + length caps from the post-processed tags) and version
+// compatibility against the host's own compiled-in TR-12 model.
+func validateHostRegistration(deviceID string, raw json.RawMessage) error {
 	hostVersion := tr12models.NewProtocolVersionWithDefaults().GetVersion()
-	var probe struct {
-		Version struct {
-			Version string `json:"version"`
-		} `json:"version"`
+
+	// Deserialize into the typed struct. The generated UnmarshalJSON enforces
+	// @required fields (outer version, channelTemplates, channelAssignments;
+	// inner version.version) and enum membership.
+	var reg tr12models.DeviceRegistration
+	if err := json.Unmarshal(raw, &reg); err != nil {
+		return fmt.Errorf("malformed (host: %s): %v", hostVersion, err)
 	}
-	if err := json.Unmarshal(reg, &probe); err != nil || probe.Version.Version == "" {
-		log.Printf("[mqtt] WARN registration from %s is missing the required version field — rejecting (host: %s)", deviceID, hostVersion)
-		return false
+
+	// @pattern + @length constraints via validator.v2.
+	if err := validator.Validate(&reg); err != nil {
+		return fmt.Errorf("model violation (host: %s): %v", hostVersion, err)
 	}
-	declared := probe.Version.Version
-	ok, err := version.IsCompatible(hostVersion, declared)
+
+	// Version compatibility.
+	ok, err := version.IsCompatible(hostVersion, reg.Version.Version)
 	if err != nil {
-		log.Printf("[mqtt] WARN registration from %s has invalid version %q — rejecting (host: %s): %v", deviceID, declared, hostVersion, err)
-		return false
+		return fmt.Errorf("invalid version %q (host: %s): %v", reg.Version.Version, hostVersion, err)
 	}
 	if !ok {
-		log.Printf("[mqtt] WARN Incompatible registration version %s from %s (host: %s). Ensure the device is compatible with TR12 major/minor version", declared, deviceID, hostVersion)
-		return false
+		return fmt.Errorf("incompatible version %s (host: %s)", reg.Version.Version, hostVersion)
 	}
-	return true
+	return nil
 }
 
 func (h *Handlers) handleStatus(topic string, payload []byte) {

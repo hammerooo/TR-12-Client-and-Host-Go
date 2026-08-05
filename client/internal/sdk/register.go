@@ -48,15 +48,9 @@ func (s *CddSdk) Register(registration *cddsdkgo.DeviceRegistration) cddsdkgo.Re
 		}
 	}
 
-	if registration == nil {
-		return cddsdkgo.ReportStatusResponseContent{
-			Success: false, State: s.state,
-			Message: "registration is required",
-		}
-	}
-	// Same version compatibility rule as initializeHost — re-check on every /register
-	// call, since the incoming registration is fresh from the caller.
-	if err := s.checkRegistrationVersion(registration); err != nil {
+	// Full TR-12 payload validation (nil, structural, version compat, xref).
+	// See sdk/validate.go. Applies to every /register call.
+	if err := s.validateRegistration(registration); err != nil {
 		return cddsdkgo.ReportStatusResponseContent{
 			Success: false, State: s.state,
 			Message: err.Error(),
