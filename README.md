@@ -73,36 +73,28 @@ go env -w GOPROXY=direct
 
 ## Building
 
-The generated Go model code is committed to the repo — no code generation step needed. Just build:
-
-> **Important:** The TR-12 protocol models live in a git submodule. You must initialize it before building:
-> ```bash
-> git submodule update --init --recursive
-> ```
+One command, from the repo root:
 
 ```bash
-# Host Service
-cd host && go build -o bin/tr12-host ./cmd/tr12-host/
-
-# CDD SDK (device-side daemon)
-cd ..
-cd client && go build -o bin/cdd-sdk ./cmd/cdd-sdk/
-
-# Application Reference Design (simulated encoder)
-cd client && go build -o bin/ard ./cmd/application_reference_design/
+./build.sh
 ```
 
-Cross-compile for Linux (EC2/embedded):
+That regenerates the Smithy models and builds every binary — host, SDK, ARD, and the Linux cross-compiles.
+
+Requires `smithy` and `openapi-generator` on your `PATH`:
 ```bash
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o bin/tr12-host-linux-ec2 ./cmd/tr12-host/
-CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o bin/cdd-sdk-arm64 ./cmd/cdd-sdk/
+brew install smithy-lang/tap/smithy-cli
+brew install openapi-generator
 ```
 
-To regenerate models from Smithy (requires `smithy` CLI and `openapi-generator`):
+And the submodule initialized on first checkout:
 ```bash
-./models/TR-12-Models/generate-tr12-models.sh go
-./models/cdd_sdk/generate-client-sdk-models.sh go
+git submodule update --init --recursive
 ```
+
+### Do not invoke the raw generate scripts directly
+
+`models/TR-12-Models/generate-tr12-models.sh` and `models/cdd_sdk/generate-client-sdk-models.sh` produce Go code with a broken `validate` tag on `ProtocolVersion.Version` (openapi-generator over-escapes backslashes in `@pattern`). `build.sh` runs a post-processor that overwrites the bad tags. If you skip `build.sh`, every valid registration is rejected at runtime with `invalid registration: Version.Version: regular expression mismatch`.
 
 ## Quick Start — Running Locally
 
