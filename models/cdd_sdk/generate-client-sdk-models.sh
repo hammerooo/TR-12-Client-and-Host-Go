@@ -71,8 +71,10 @@ fi
 
 echo "✅ Done! Client SDK is in $OUTPUT_PATH"
 
-# Fix module name — openapi-generator uses a placeholder that breaks go.work
+# Fix module name — openapi-generator uses a placeholder that breaks go.work.
+# Use sed -i.bak (portable across BSD/macOS and GNU/Linux), then drop the backup.
 if [ "$LANG" = "go" ]; then
-    sed -i '' 's|github.com/GIT_USER_ID/GIT_REPO_ID|github.com/vsf-tv/TR-12-Client-and-Host-Go/models/cdd_sdk/generated/cdd_sdkgo|' "${OUTPUT_PATH}/go.mod"
+    sed -i.bak 's|github.com/GIT_USER_ID/GIT_REPO_ID|github.com/vsf-tv/TR-12-Client-and-Host-Go/models/cdd_sdk/generated/cdd_sdkgo|' "${OUTPUT_PATH}/go.mod"
+    rm -f "${OUTPUT_PATH}/go.mod.bak"
     echo "✅ Fixed go.mod module name"
 fi
