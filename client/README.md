@@ -104,6 +104,7 @@ DISCONNECTED → PAIRING → CONNECTING → CONNECTED
 | `--host_id` | Host ID to connect to (required) |
 | `--sdk_url` | Base URL of the running SDK (default: `http://127.0.0.1:8603`) |
 | `--registration_file` | Path to registration JSON file (default: `payloads/1_channel_encoder/registration.json`) |
+| `--deprovision_after` | If > 0, deprovision from the host and exit once the device has been `CONNECTED` for this long (Go duration, e.g. `90s`, `1m`). Default `0` disables it. Note that deprovisioning removes all stored credentials. |
 
 ---
 

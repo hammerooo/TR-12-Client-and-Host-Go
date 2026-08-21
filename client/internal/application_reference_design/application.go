@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	cddsdkgo "github.com/vsf-tv/TR-12-Client-and-Host-Go/models/cdd_sdk/generated/cdd_sdkgo"
 )
@@ -71,6 +72,12 @@ func NewClientApplication(sdkURL, basePath, registrationFile string) (*ClientApp
 	}
 
 	return app, nil
+}
+
+// SetDeprovisionAfter configures the loop to deprovision and exit once the device has been connected for the given duration. Zero disables it.
+// Note that on deprovision, all credentials will be removed.
+func (a *ClientApplication) SetDeprovisionAfter(d time.Duration) {
+	a.loop.SetDeprovisionAfter(d)
 }
 
 // Stop signals the application to shut down.

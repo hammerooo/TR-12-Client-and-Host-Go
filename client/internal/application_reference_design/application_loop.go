@@ -77,6 +77,8 @@ type ApplicationLoop struct {
 
 	reportedInitialActualConfig bool
 
+	deprovisionAfter time.Duration
+
 	log *cddlogger.CDDLogger
 
 	StateCallback         func(state, pairingCode, deviceID string)
@@ -100,6 +102,10 @@ func (l *ApplicationLoop) SetLogger(log *cddlogger.CDDLogger) {
 	l.log = log
 }
 
+func (l *ApplicationLoop) SetDeprovisionAfter(d time.Duration) {
+	l.deprovisionAfter = d
+}
+
 func (l *ApplicationLoop) logf(format string, args ...interface{}) {
 	msg := fmt.Sprintf(format, args...)
 	if l.log != nil {
@@ -112,6 +118,7 @@ func (l *ApplicationLoop) logf(format string, args ...interface{}) {
 // Run executes the loop until ctx is cancelled.
 func (l *ApplicationLoop) Run(ctx context.Context, hostID string) {
 	wasConnected := false
+	var connectedSince time.Time
 	for {
 		select {
 		case <-ctx.Done():
@@ -148,10 +155,26 @@ func (l *ApplicationLoop) Run(ctx context.Context, hostID string) {
 		}
 
 		if resp.State == "CONNECTED" {
+			if !wasConnected {
+				connectedSince = time.Now()
+			}
 			wasConnected = true
 			l.reportInitialActualConfig()
 			l.processConfiguration(ctx)
 			l.reportStatus()
+
+			if l.deprovisionAfter > 0 && time.Since(connectedSince) >= l.deprovisionAfter {
+				l.logf("[LOOP] connected for %s (>= deprovision-after %s). Deprovisioning and exiting",
+					time.Since(connectedSince).Round(time.Second), l.deprovisionAfter)
+				l.cancelAllWorkers()
+				if resp, err := l.sdk.Deprovision(hostID); err != nil {
+					l.logf("[LOOP] deprovision error: %v", err)
+				} else {
+					l.logf("[LOOP] deprovision success=%t state=%s message=%s",
+						resp.Success, resp.State, resp.Message)
+				}
+				return
+			}
 		} else if wasConnected {
 			l.logf("[LOOP] transitioned away from CONNECTED (now %s) — resetting config state", resp.State)
 			l.resetConfigState()
