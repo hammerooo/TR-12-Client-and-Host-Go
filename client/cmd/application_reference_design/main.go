@@ -35,6 +35,7 @@ func main() {
 	hostID := flag.String("host_id", "", "Host ID to connect to (required)")
 	sdkURL := flag.String("sdk_url", "http://127.0.0.1:8603", "Base URL of the running CDD SDK")
 	registrationFile := flag.String("registration_file", "", "Path to registration JSON file (default: payloads/1_channel_encoder/registration.json)")
+	deprovisionAfter := flag.Duration("deprovision_after", 0, "If > 0, deprovision from the host and exit once CONNECTED for this long (e.g. 1m, 90s)")
 	flag.Parse()
 
 	if *hostID == "" {
@@ -70,6 +71,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Failed to initialize ARD: %v\n", err)
 		os.Exit(1)
 	}
+	app.SetDeprovisionAfter(*deprovisionAfter)
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
@@ -82,5 +84,8 @@ func main() {
 	}()
 
 	fmt.Printf("ARD connecting to host: %s via SDK at %s\n", *hostID, *sdkURL)
+	if *deprovisionAfter > 0 {
+		fmt.Printf("ARD will deprovision and exit after %s connected\n", *deprovisionAfter)
+	}
 	app.RunLoop(*hostID)
 }
