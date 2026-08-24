@@ -266,13 +266,6 @@ func (s *CddSdk) ReportConfiguration(payload *cddsdkgo.ActualDeviceConfiguration
 	s.apiLock.Lock()
 	defer s.apiLock.Unlock()
 
-	// Log the full payload so we can verify what's being reported
-	if payloadBytes, err := json.Marshal(payload); err == nil {
-		s.logger.Infof("Report Configuration payload: %s", string(payloadBytes))
-	} else {
-		s.logger.Info("Report Configuration")
-	}
-
 	// Store the actual configuration for thumbnail path resolution
 	s.actualConfig.Store(payload)
 
@@ -285,8 +278,14 @@ func (s *CddSdk) ReportConfiguration(payload *cddsdkgo.ActualDeviceConfiguration
 		resp := cddsdkgo.NewReportActualConfigurationResponseContent(false, s.state, err.Error())
 		return *resp
 	}
-	// Wrap in envelope
+	// Wrap in envelope — this is what actually goes on the wire.
 	envelope := map[string]interface{}{"actualDeviceConfiguration": payload}
+	// Log the wire payload so debugging matches what the host receives.
+	if envBytes, err := json.Marshal(envelope); err == nil {
+		s.logger.Infof("Report Configuration payload: %s", string(envBytes))
+	} else {
+		s.logger.Info("Report Configuration")
+	}
 	if err := s.doPublishMessage(envelope, hs.DevicePublishesActualConfigurationTopic); err != nil {
 		resp := cddsdkgo.NewReportActualConfigurationResponseContent(false, s.state, fmt.Sprintf("Configuration update not sent: %v", err))
 		return *resp

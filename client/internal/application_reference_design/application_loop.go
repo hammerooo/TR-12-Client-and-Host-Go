@@ -47,6 +47,12 @@ import (
 const actualReportInterval = 60 * time.Second
 const pollInterval = 500 * time.Millisecond
 
+// postConnectSettleDelay is the pause between transitioning to CONNECTED and
+// publishing the first status / actual-config messages. Prevents a race where
+// the host has processed pairing/registration but hasn't yet attached the MQTT
+// subscribers that route status and configuration reports.
+const postConnectSettleDelay = 7 * time.Second
+
 // stopTimeout is the maximum time stopAndWait will wait for a channel to reach
 // "stopped" before giving up. If exceeded, the channel is marked DEGRADED and
 // the config apply is aborted for this cycle.
@@ -157,6 +163,22 @@ func (l *ApplicationLoop) Run(ctx context.Context, hostID string) {
 		if resp.State == "CONNECTED" {
 			if !wasConnected {
 				connectedSince = time.Now()
+				// Post-connect settling delay. Gives the host's MQTT subscription
+				// path time to become ready before we start publishing status and
+				// actual-config, so the very first messages aren't lost to a
+				// not-yet-attached subscriber. Any in-flight channel workers from
+				// a prior connection keep running through this delay —
+				// disconnect/reconnect blips must not blow away work in progress.
+				l.logf("[LOOP] connected — waiting %s before first publish", postConnectSettleDelay)
+				select {
+				case <-ctx.Done():
+					// Process shutdown during the settle delay: tear down any in-flight
+					// channel workers and exit. Only fires on true shutdown, not on
+					// state transitions.
+					l.cancelAllWorkers()
+					return
+				case <-time.After(postConnectSettleDelay):
+				}
 			}
 			wasConnected = true
 			l.reportInitialActualConfig()

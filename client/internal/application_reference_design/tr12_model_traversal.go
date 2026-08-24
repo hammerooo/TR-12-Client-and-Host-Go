@@ -20,6 +20,16 @@ import (
 	cddsdkgo "github.com/vsf-tv/TR-12-Client-and-Host-Go/models/cdd_sdk/generated/cdd_sdkgo"
 )
 
+// initialVersion is the sentinel value used in ActualDeviceConfiguration.version
+// (and per-channel version) when the device is reporting state before it has
+// received any DesiredDeviceConfiguration to echo back. TR-12 marks these
+// fields @required @length(max:80); reporting an empty string is a valid-model
+// but semantically-vacant report — hosts read the version field to correlate
+// with what they asked for, and empty carries no information. "initial" makes
+// the "before any desired" state explicit so operators and the host can
+// distinguish it from stale or partially-applied reports.
+const initialVersion = "initial"
+
 // Tr12Shim bridges TR-12 model structures to device callbacks.
 type Tr12Shim struct {
 	CB DeviceCallbacks
@@ -105,9 +115,12 @@ func (s *Tr12Shim) applyChannel(chCfg cddsdkgo.DesiredChannelConfiguration) {
 func (s *Tr12Shim) GetActualConfiguration(registration *cddsdkgo.DeviceRegistration, desired *cddsdkgo.DesiredDeviceConfiguration, appliedChannelVersions map[string]string) *cddsdkgo.ActualDeviceConfiguration {
 	result := &cddsdkgo.ActualDeviceConfiguration{}
 
-	// Echo device-level version from desired
+	// Device-level version: echo desired's version when we have one, otherwise
+	// mark the report as "initial" (device state prior to any host configuration).
 	if desired != nil {
 		result.Version = desired.Version
+	} else {
+		result.Version = initialVersion
 	}
 
 	// Device-level standard settings
@@ -133,11 +146,17 @@ func (s *Tr12Shim) GetActualConfiguration(registration *cddsdkgo.DeviceRegistrat
 		}
 	}
 
-	// Channels — resolve assignments → templates, echo back the applied version per channel
+	// Channels — resolve assignments → templates, echo back the applied version per channel.
+	// A channel that has not yet applied any desired configuration reports version=initial
+	// so the host can distinguish "never configured" from a stale applied version.
 	var channels []cddsdkgo.ActualChannelConfiguration
 	for _, rc := range resolveChannels(registration) {
 		chCfg := s.buildChannelConfig(rc.channelID, rc.template, desiredChannelSettings[rc.channelID])
-		chCfg.Version = appliedChannelVersions[rc.channelID]
+		if v := appliedChannelVersions[rc.channelID]; v != "" {
+			chCfg.Version = v
+		} else {
+			chCfg.Version = initialVersion
+		}
 		channels = append(channels, chCfg)
 	}
 	result.Channels = channels
