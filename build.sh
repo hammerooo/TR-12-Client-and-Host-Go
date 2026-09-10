@@ -41,13 +41,18 @@ go build -o bin/tr12-host ./cmd/tr12-host/
 echo "=== Building host (Linux amd64 for EC2) ==="
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o bin/tr12-host-linux-ec2 ./cmd/tr12-host/
 
+# -tags netgo forces Go's pure-Go DNS resolver instead of libc/getaddrinfo.
+# The libc path on macOS uses the system resolver stack (scutil --dns) which
+# can return NXDOMAIN for hostnames that /etc/resolv.conf's nameserver
+# resolves correctly (typically due to VPN split-DNS or mDNSResponder cache).
+# The pure-Go resolver reads /etc/resolv.conf directly, matching `dig`.
 echo "=== Building client SDK (macOS) ==="
 cd "$SCRIPT_DIR/client"
 mkdir -p bin
-go build -o bin/cdd-sdk ./cmd/cdd-sdk/
+go build -tags netgo -o bin/cdd-sdk ./cmd/cdd-sdk/
 
 echo "=== Building ARD (macOS) ==="
-go build -o bin/ard ./cmd/application_reference_design/
+go build -tags netgo -o bin/ard ./cmd/application_reference_design/
 
 echo ""
 echo "✅ Build complete"

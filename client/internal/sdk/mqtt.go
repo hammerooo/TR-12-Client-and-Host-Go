@@ -72,6 +72,7 @@ func (s *CddSdk) startConnect() (cddsdkgo.ConnectResponseContent, error) {
 		s.certs.HostSettings.MqttAlpnProtocol,
 	)
 	if err != nil {
+		s.logger.Errorf("[MQTT] SSL setup failed: %v (type=%T)", err, err)
 		s.reset()
 		return cddsdkgo.ConnectResponseContent{
 			Success: false, State: s.state,
@@ -81,6 +82,7 @@ func (s *CddSdk) startConnect() (cddsdkgo.ConnectResponseContent, error) {
 	}
 
 	if err := s.connectMQTT(tlsConfig); err != nil {
+		s.logger.Errorf("[MQTT] connect failed: %v (type=%T)", err, err)
 		s.reset()
 		return cddsdkgo.ConnectResponseContent{
 			Success: false, State: s.state,
