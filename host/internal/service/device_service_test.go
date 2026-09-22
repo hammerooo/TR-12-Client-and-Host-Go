@@ -93,7 +93,7 @@ func doPair(t *testing.T, svc *DeviceService) (deviceID, pairingCode, accessCode
 	csr := generateTestCSR(t)
 	resp, pairingErr, err := svc.Pair(models.CreatePairingCodeRequestContent{
 		HostId:     "test-host",
-		Version:    models.ProtocolVersion{Version: models.PtrString("1.0")},
+		Version:    models.ProtocolVersion{Version: "1.0"},
 		DeviceType: "SOURCE",
 		CertificateSigningRequest: csr,
 	})
@@ -127,7 +127,7 @@ func TestPair_HostIDMismatch(t *testing.T) {
 	svc, _, _ := newTestDeviceService(t)
 	_, pairingErr, err := svc.Pair(models.CreatePairingCodeRequestContent{
 		HostId:     "wrong-host",
-		Version:    models.ProtocolVersion{Version: models.PtrString("1.0")},
+		Version:    models.ProtocolVersion{Version: "1.0"},
 		DeviceType: "SOURCE",
 		CertificateSigningRequest: generateTestCSR(t),
 	})
@@ -146,7 +146,7 @@ func TestPair_BadDeviceType(t *testing.T) {
 	svc, _, _ := newTestDeviceService(t)
 	_, pairingErr, _ := svc.Pair(models.CreatePairingCodeRequestContent{
 		HostId:     "test-host",
-		Version:    models.ProtocolVersion{Version: models.PtrString("1.0")},
+		Version:    models.ProtocolVersion{Version: "1.0"},
 		DeviceType: "INVALID",
 		CertificateSigningRequest: generateTestCSR(t),
 	})
@@ -162,7 +162,7 @@ func TestPair_EmptyVersion(t *testing.T) {
 	svc, _, _ := newTestDeviceService(t)
 	_, pairingErr, _ := svc.Pair(models.CreatePairingCodeRequestContent{
 		HostId:     "test-host",
-		Version:    models.ProtocolVersion{Version: models.PtrString("")},
+		Version:    models.ProtocolVersion{Version: ""},
 		DeviceType: "SOURCE",
 		CertificateSigningRequest: generateTestCSR(t),
 	})

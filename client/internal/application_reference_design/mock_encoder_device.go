@@ -37,6 +37,7 @@ type channelState struct {
 	srtPort            int
 	srtStreamID        string
 	srtMinLatencyMs    int
+	srtEncryption      *cddsdkgo.SrtEncryption
 	health             *cddsdkgo.Health
 }
 
@@ -139,6 +140,17 @@ func (e *Encoder) StartChannel(channelID, ip string, port int, streamID string) 
 
 	fmt.Printf("[%s] ************* Starting *****************\n", channelID)
 	srtURL := fmt.Sprintf("srt://%s:%d/%s", ip, port, streamID)
+	redactedURL := srtURL
+	if ch.srtEncryption != nil {
+		query := fmt.Sprintf("passphrase=%s", ch.srtEncryption.Passphrase)
+		redactedQuery := "passphrase=REDACTED"
+		if keyLen := pbKeyLen(ch.srtEncryption.KeyLength); keyLen > 0 {
+			query += fmt.Sprintf("&pbkeylen=%d", keyLen)
+			redactedQuery += fmt.Sprintf("&pbkeylen=%d", keyLen)
+		}
+		srtURL += "?" + query
+		redactedURL += "?" + redactedQuery
+	}
 	cmd := exec.Command(FfmpegPath,
 		"-f", "avfoundation", "-framerate", "30", "-video_size", "640x480",
 		"-i", "0", "-vcodec", "libx264", "-f", "mpegts", srtURL,
@@ -147,7 +159,8 @@ func (e *Encoder) StartChannel(channelID, ip string, port int, streamID string) 
 	cmd.Stderr = os.Stderr
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
-	fmt.Printf("[%s] command: %s %v\n", channelID, FfmpegPath, cmd.Args[1:])
+	redactedArgs := append(append([]string{}, cmd.Args[1:len(cmd.Args)-1]...), redactedURL)
+	fmt.Printf("[%s] command: %s %v\n", channelID, FfmpegPath, redactedArgs)
 	if err := cmd.Start(); err != nil {
 		fmt.Printf("[%s] Failed to start ffmpeg: %v\n", channelID, err)
 		return
@@ -280,14 +293,35 @@ func (e *Encoder) HandleTransportConfigChange(channelID string, protocol *cddsdk
 	port := int(srt.Port)
 	streamID := srt.GetStreamId()
 	latencyMs := int(srt.GetMinimumLatencyMilliseconds())
-	fmt.Printf("[%s] Got SRT config: ip=%s port=%d streamId=%s latencyMs=%d\n", channelID, ip, port, streamID, latencyMs)
+	encryption := srt.Encryption
+	fmt.Printf("[%s] Got SRT config: ip=%s port=%d streamId=%s latencyMs=%d encryption=%s\n",
+		channelID, ip, port, streamID, latencyMs, describeEncryption(encryption))
 	e.mu.Lock()
 	ch := e.getOrCreateChannel(channelID)
 	ch.srtIP = ip
 	ch.srtPort = port
 	ch.srtStreamID = streamID
 	ch.srtMinLatencyMs = latencyMs
+	// A desired config without encryption must not leave a stale passphrase behind.
+	if encryption != nil {
+		encCopy := *encryption
+		ch.srtEncryption = &encCopy
+	} else {
+		ch.srtEncryption = nil
+	}
 	e.mu.Unlock()
+}
+
+// describeEncryption returns a log-safe description of an SRT encryption config
+func describeEncryption(enc *cddsdkgo.SrtEncryption) string {
+	if enc == nil {
+		return "none"
+	}
+	keyLength := "device-default"
+	if enc.KeyLength != nil {
+		keyLength = string(*enc.KeyLength)
+	}
+	return fmt.Sprintf("enabled (passphrase=REDACTED, keyLength=%s)", keyLength)
 }
 
 // HandleUpdateState processes a channel state change (ACTIVE/IDLE).
@@ -323,11 +357,32 @@ func (e *Encoder) HandleUpdateState(channelID string, state cddsdkgo.ChannelStat
 	return ""
 }
 
+// pbKeyLen maps a TR-12 SRT key length to the SRT pbkeylen value in bytes. Returns 0 when unset.
+func pbKeyLen(keyLength *cddsdkgo.SrtEncryptionKeyLength) int {
+	if keyLength == nil {
+		return 0
+	}
+	switch *keyLength {
+	case cddsdkgo.SRTENCRYPTIONKEYLENGTH_AES_128:
+		return 16
+	case cddsdkgo.SRTENCRYPTIONKEYLENGTH_AES_192:
+		return 24
+	case cddsdkgo.SRTENCRYPTIONKEYLENGTH_AES_256:
+		return 32
+	}
+	return 0
+}
+
 // GetChannelConnection returns the current SRT connection config for the given channel.
 func (e *Encoder) GetChannelConnection(channelID string) *cddsdkgo.TransportProtocol {
 	e.mu.Lock()
 	ch := e.getOrCreateChannel(channelID)
 	ip, port, streamID, latencyMs := ch.srtIP, ch.srtPort, ch.srtStreamID, ch.srtMinLatencyMs
+	var encryption *cddsdkgo.SrtEncryption
+	if ch.srtEncryption != nil {
+		encCopy := *ch.srtEncryption
+		encryption = &encCopy
+	}
 	e.mu.Unlock()
 
 	if ip == "" {
@@ -350,6 +405,7 @@ func (e *Encoder) GetChannelConnection(channelID string) *cddsdkgo.TransportProt
 	srtProto.StreamId = &streamID
 	latencyF := float32(latencyMs)
 	srtProto.MinimumLatencyMilliseconds = &latencyF
+	srtProto.Encryption = encryption
 	tp := cddsdkgo.SrtCallerAsTransportProtocol(cddsdkgo.NewSrtCaller(srtProto))
 	return &tp
 }

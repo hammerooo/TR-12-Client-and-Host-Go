@@ -66,7 +66,14 @@ func (cb *ArdCallbacks) UpdateChannelProfile(channelID, profileID string) {
 }
 
 func (cb *ArdCallbacks) UpdateChannelConnection(channelID string, protocol *cddsdkgo.TransportProtocol) {
-	fmt.Printf("[UPDATE] Channel %s connection: %+v\n", channelID, protocol)
+	// Avoid printing SrtCaller encryption directly.
+	if protocol != nil && protocol.SrtCaller != nil {
+		srt := protocol.SrtCaller.SrtCaller
+		fmt.Printf("[UPDATE] Channel %s connection: srtCaller address=%s port=%d streamId=%s encryption=%s\n",
+			channelID, srt.Address, int(srt.Port), srt.GetStreamId(), describeEncryption(srt.Encryption))
+	} else {
+		fmt.Printf("[UPDATE] Channel %s connection: %+v\n", channelID, protocol)
+	}
 	cb.Encoder.HandleTransportConfigChange(channelID, protocol)
 }
 
